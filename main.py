@@ -22,7 +22,7 @@ def init_reddit():
     )
 
 @st.cache_data(ttl=3600)  # Cache data for 1 hour
-def get_subreddit_posts(_reddit, subreddit_name, post_limit, time_filter="month"):
+def get_subreddit_posts(_reddit, subreddit_name, time_filter="month"):
     try:
         subreddit = _reddit.subreddit(subreddit_name)
         posts_dict = {
@@ -34,7 +34,7 @@ def get_subreddit_posts(_reddit, subreddit_name, post_limit, time_filter="month"
             "Post URL": []
         }
         
-        for post in subreddit.top(limit=post_limit, time_filter=time_filter):
+        for post in subreddit.top(limit=None, time_filter=time_filter):
             posts_dict["Title"].append(post.title)
             posts_dict["Post Text"].append(post.selftext)
             posts_dict["ID"].append(post.id)
@@ -96,7 +96,6 @@ def main():
         
         # Input fields
         subreddit_name = st.text_input("Enter subreddit name:", "selfhosted")
-        post_limit = st.slider("Number of posts to scrape:", 1, 100, 10)
         time_filter = st.selectbox(
             "Time filter:",
             ["day", "week", "month", "year", "all"]
@@ -105,7 +104,7 @@ def main():
         if st.button("Scrape Subreddit"):
             with st.spinner("Scraping posts..."):
                 try:
-                    df = get_subreddit_posts(reddit, subreddit_name, post_limit, time_filter)
+                    df = get_subreddit_posts(reddit, subreddit_name, time_filter=time_filter)
                     st.success(f"Successfully scraped {len(df)} posts!")
                     
                     # Display the data
