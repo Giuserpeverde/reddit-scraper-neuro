@@ -1,5 +1,7 @@
 import os
+import re
 from datetime import datetime, date, timedelta, timezone
+from typing import List, Dict, Tuple
 
 import pandas as pd
 import praw
@@ -21,6 +23,112 @@ def init_reddit() -> praw.Reddit:
     return praw.Reddit(client_id=client_id,
                        client_secret=client_secret,
                        user_agent=user_agent)
+
+
+# ──────────────────────────── Intelligent Categorization ────────────────────────────
+def get_category_keywords() -> Dict[str, List[str]]:
+    """Define keywords and patterns for each category like GummySearch."""
+    return {
+        "Pain Points": [
+            "problem", "issue", "struggling", "frustrated", "annoying", "broken", "doesn't work",
+            "hate", "terrible", "awful", "worst", "failing", "difficult", "hard", "impossible",
+            "bug", "error", "crash", "slow", "expensive", "overpriced", "waste", "scam",
+            "disappointed", "regret", "mistake", "wrong", "bad", "horrible", "sucks",
+            "fix", "solve", "help", "support", "trouble", "stuck", "confused", "lost"
+        ],
+        "Solution Requests": [
+            "how to", "how do", "how can", "what's the best", "recommend", "suggestion",
+            "advice", "help me", "looking for", "need", "want", "seeking", "search",
+            "alternative", "replacement", "substitute", "instead of", "better than",
+            "tutorial", "guide", "instructions", "step by step", "walkthrough",
+            "best way", "most effective", "proven method", "tips", "tricks", "hacks"
+        ],
+        "Money Talk": [
+            "price", "cost", "expensive", "cheap", "budget", "affordable", "money", "pay",
+            "subscription", "monthly", "yearly", "fee", "charge", "billing", "invoice",
+            "worth it", "value", "roi", "return on investment", "save money", "deal",
+            "discount", "coupon", "promo", "sale", "free", "pricing", "quote", "estimate",
+            "$", "usd", "euro", "pound", "currency", "salary", "income", "revenue", "profit"
+        ],
+        "Hot Discussions": [
+            "trending", "viral", "popular", "everyone", "talking about", "buzz", "hype",
+            "news", "announcement", "update", "release", "launch", "breaking", "controversy",
+            "debate", "argument", "discussion", "thoughts", "opinions", "what do you think",
+            "hot take", "unpopular opinion", "controversial", "drama", "gossip"
+        ],
+        "Seeking Alternatives": [
+            "alternative", "replacement", "substitute", "instead of", "better than", "similar to",
+            "like", "competitor", "switch from", "migrate", "move away", "leave", "quit",
+            "fed up", "done with", "tired of", "sick of", "switching", "changing",
+            "compare", "vs", "versus", "difference", "which is better", "pros and cons"
+        ]
+    }
+
+def classify_post_content(title: str, text: str) -> Tuple[str, float]:
+    """
+    Classify a post into one of the GummySearch categories.
+    Returns (category, confidence_score).
+    """
+    keywords = get_category_keywords()
+    content = f"{title.lower()} {text.lower()}"
+    
+    # Remove common noise words for better classification
+    noise_words = ["the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by"]
+    for word in noise_words:
+        content = re.sub(rf'\b{word}\b', '', content)
+    
+    category_scores = {}
+    
+    for category, category_keywords in keywords.items():
+        score = 0
+        for keyword in category_keywords:
+            # Use regex for better matching
+            pattern = rf'\b{re.escape(keyword.lower())}\b'
+            matches = len(re.findall(pattern, content))
+            score += matches
+            
+            # Boost score for title matches (more important)
+            title_matches = len(re.findall(pattern, title.lower()))
+            score += title_matches * 2
+        
+        category_scores[category] = score
+    
+    # Get the category with highest score
+    if max(category_scores.values()) == 0:
+        return "General Discussion", 0.0
+    
+    best_category = max(category_scores, key=category_scores.get)
+    max_score = category_scores[best_category]
+    
+    # Calculate confidence (normalize by content length and keyword count)
+    total_words = len(content.split())
+    confidence = min(max_score / max(total_words * 0.1, 1), 1.0)
+    
+    return best_category, confidence
+
+def get_category_color(category: str) -> str:
+    """Get color for category badges like GummySearch."""
+    colors = {
+        "Pain Points": "#FF4B4B",      # Red
+        "Solution Requests": "#00D4FF", # Blue  
+        "Money Talk": "#00FF88",       # Green
+        "Hot Discussions": "#FF8C00",  # Orange
+        "Seeking Alternatives": "#9966FF", # Purple
+        "General Discussion": "#666666"  # Gray
+    }
+    return colors.get(category, "#666666")
+
+def get_category_icon(category: str) -> str:
+    """Get emoji icon for each category."""
+    icons = {
+        "Pain Points": "😣",
+        "Solution Requests": "❓", 
+        "Money Talk": "💰",
+        "Hot Discussions": "🔥",
+        "Seeking Alternatives": "🔄",
+        "General Discussion": "💬"
+    }
+    return icons.get(category, "💬")
 
 
 # ─────────────────────── helpers: fetch posts & single thread ──────────────────
@@ -61,6 +169,9 @@ def get_subreddit_posts(
             if post.created_utc < start_ts:         # we’re past window → stop
                 break
 
+            # Classify the post content
+            category, confidence = classify_post_content(post.title, post.selftext or "")
+            
             rows.append({
                 "ID":                  post.id,
                 "Title":               post.title,
@@ -79,6 +190,8 @@ def get_subreddit_posts(
                 "Num Cross-posts":     post.num_crossposts,
                 "Permalink":           f"https://www.reddit.com{post.permalink}",
                 "Post URL":            post.url,
+                "Category":            category,
+                "Category Confidence": confidence,
             })
         return pd.DataFrame(rows)
 
@@ -92,6 +205,10 @@ def get_post_by_url(_reddit: praw.Reddit, url: str) -> tuple[pd.DataFrame, pd.Da
     """Return a DataFrame for the submission + its **entire** comment tree."""
     try:
         s = _reddit.submission(url=url)
+        
+        # Classify the post content
+        category, confidence = classify_post_content(s.title, s.selftext or "")
+        
         post_df = pd.DataFrame([{
             "ID":            s.id,
             "Title":         s.title,
@@ -110,6 +227,8 @@ def get_post_by_url(_reddit: praw.Reddit, url: str) -> tuple[pd.DataFrame, pd.Da
             "Num Cross-posts":    s.num_crossposts,
             "Permalink":          f"https://www.reddit.com{s.permalink}",
             "Post URL":           s.url,
+            "Category":           category,
+            "Category Confidence": confidence,
         }])
 
         s.comments.replace_more(limit=None)
@@ -278,6 +397,57 @@ def apply_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
+def create_category_analytics(df: pd.DataFrame):
+    """Create category distribution analytics like GummySearch."""
+    if df.empty or 'Category' not in df.columns:
+        return
+    
+    st.markdown('<h3 class="section-header">🏷️ Content Categories</h3>', unsafe_allow_html=True)
+    
+    # Category distribution
+    category_counts = df['Category'].value_counts()
+    
+    # Create category cards
+    cols = st.columns(len(category_counts))
+    for i, (category, count) in enumerate(category_counts.items()):
+        with cols[i % len(cols)]:
+            icon = get_category_icon(category)
+            color = get_category_color(category)
+            percentage = (count / len(df)) * 100
+            
+            st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, {color}20, {color}10);
+                    border-left: 4px solid {color};
+                    border-radius: 8px;
+                    padding: 1rem;
+                    margin: 0.5rem 0;
+                    text-align: center;
+                ">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">{icon}</div>
+                    <div style="font-weight: 600; color: {color};">{category}</div>
+                    <div style="font-size: 1.5rem; font-weight: bold; margin: 0.5rem 0;">{count}</div>
+                    <div style="font-size: 0.9rem; opacity: 0.8;">{percentage:.1f}%</div>
+                </div>
+            """, unsafe_allow_html=True)
+    
+    # Category distribution chart
+    fig_categories = px.pie(
+        values=category_counts.values,
+        names=category_counts.index,
+        title="Category Distribution",
+        color=category_counts.index,
+        color_discrete_map={
+            cat: get_category_color(cat) for cat in category_counts.index
+        }
+    )
+    fig_categories.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font_color='white'
+    )
+    st.plotly_chart(fig_categories, use_container_width=True)
+
 def create_stats_dashboard(df: pd.DataFrame):
     """Create a stats dashboard with key metrics."""
     if df.empty:
@@ -351,7 +521,7 @@ def main() -> None:
         with col1:
             sub_name = st.text_input(
                 "**Subreddit Name**",
-                value="selfhosted",
+                value="",
                 placeholder="e.g., selfhosted, programming, technology",
                 help="Enter the name of the subreddit without 'r/'"
             )
@@ -404,6 +574,29 @@ def main() -> None:
             with col3:
                 min_awards = st.number_input("Min Awards", value=0, help="Minimum award count")
                 oc_only = st.checkbox("Original Content Only", value=False)
+        
+        # Category filters (like GummySearch)
+        with st.expander("🏷️ Category Filters (GummySearch Style)"):
+            st.markdown("**Filter by Content Categories:**")
+            categories = ["All Categories", "Pain Points", "Solution Requests", "Money Talk", "Hot Discussions", "Seeking Alternatives", "General Discussion"]
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                selected_categories = st.multiselect(
+                    "Select Categories",
+                    categories[1:],  # Exclude "All Categories" from multiselect
+                    default=[],
+                    help="Choose which types of content to include"
+                )
+            with col2:
+                min_confidence = st.slider(
+                    "Category Confidence",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.1,
+                    step=0.1,
+                    help="Minimum confidence for category classification"
+                )
 
         # Action button with better styling
         if st.button("🚀 Start Scraping", use_container_width=True):
@@ -428,11 +621,20 @@ def main() -> None:
                     df = df[~df['Spoiler']]
                 if oc_only:
                     df = df[df['Is Original Content']]
+                
+                # Apply category filters (GummySearch style)
+                if selected_categories:
+                    df = df[df['Category'].isin(selected_categories)]
+                if min_confidence > 0:
+                    df = df[df['Category Confidence'] >= min_confidence]
 
                 st.success(f"✅ Successfully fetched {len(df)} posts from r/{sub_name}")
                 
                 # Stats dashboard
                 create_stats_dashboard(df)
+                
+                # Category analytics (GummySearch style)
+                create_category_analytics(df)
                 
                 # Charts section
                 if show_charts and len(df) > 0:
@@ -476,7 +678,7 @@ def main() -> None:
                 # Column selection
                 with st.expander("🔧 Customize Columns"):
                     all_columns = df.columns.tolist()
-                    default_columns = ['Title', 'Author', 'Score', 'Total Comments', 'Created UTC', 'Permalink']
+                    default_columns = ['Title', 'Category', 'Author', 'Score', 'Total Comments', 'Created UTC', 'Permalink']
                     selected_columns = st.multiselect(
                         "Select columns to display:",
                         all_columns,
@@ -484,7 +686,23 @@ def main() -> None:
                     )
                 
                 display_df = df[selected_columns] if selected_columns else df
-                st.dataframe(display_df, use_container_width=True, height=400)
+                
+                # Enhanced dataframe display with category styling
+                if 'Category' in display_df.columns:
+                    # Create a copy for styling
+                    styled_df = display_df.copy()
+                    
+                    # Add category styling
+                    def style_category(val):
+                        color = get_category_color(val)
+                        icon = get_category_icon(val)
+                        return f"background-color: {color}20; color: {color}; font-weight: bold;"
+                    
+                    # Apply styling to Category column
+                    styled_df = styled_df.style.applymap(style_category, subset=['Category'])
+                    st.dataframe(styled_df, use_container_width=True, height=400)
+                else:
+                    st.dataframe(display_df, use_container_width=True, height=400)
 
                 # Download section
                 col1, col2, col3 = st.columns(3)
