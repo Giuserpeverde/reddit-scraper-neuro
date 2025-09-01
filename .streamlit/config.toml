@@ -2,14 +2,15 @@
 developmentMode = false
 
 [server]
-runOnSave = true
-allowRunOnSave = true
+runOnSave = false
+allowRunOnSave = false
 port = 8501
 enableCORS = false
 enableXsrfProtection = true
 maxUploadSize = 200
 maxMessageSize = 200
-enableWebsocketCompression = false
+enableWebsocketCompression = true
+headless = true
 
 [browser]
 gatherUsageStats = false
@@ -43,3 +44,7 @@ messageFormat = "%(asctime)s %(message)s"
 showfileUploaderEncoding = false
 showImageFormat = false
 showPyplotGlobalUse = false
+
+[server.fileWatcherType]
+# Disable file watching in production
+pollIntervalSec = 0
