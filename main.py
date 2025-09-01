@@ -16,13 +16,41 @@ if os.path.exists(".env"):  # load only in local/dev
     load_dotenv()
 
 def init_reddit() -> praw.Reddit:
-    """Create a PRAW `Reddit` instance from env / Streamlit secrets."""
-    client_id     = os.getenv("REDDIT_CLIENT_ID")     or st.secrets["REDDIT_CLIENT_ID"]
-    client_secret = os.getenv("REDDIT_CLIENT_SECRET") or st.secrets["REDDIT_CLIENT_SECRET"]
-    user_agent    = os.getenv("REDDIT_USER_AGENT")    or st.secrets["REDDIT_USER_AGENT"]
-    return praw.Reddit(client_id=client_id,
-                       client_secret=client_secret,
-                       user_agent=user_agent)
+    """Create a PRAW `Reddit` instance from env / Streamlit secrets.
+    Shows a helpful message and stops if credentials are missing.
+    """
+    client_id     = os.getenv("REDDIT_CLIENT_ID")     or st.secrets.get("REDDIT_CLIENT_ID")
+    client_secret = os.getenv("REDDIT_CLIENT_SECRET") or st.secrets.get("REDDIT_CLIENT_SECRET")
+    user_agent    = os.getenv("REDDIT_USER_AGENT")    or st.secrets.get("REDDIT_USER_AGENT")
+
+    missing: list[str] = []
+    if not client_id:
+        missing.append("REDDIT_CLIENT_ID")
+    if not client_secret:
+        missing.append("REDDIT_CLIENT_SECRET")
+    if not user_agent:
+        missing.append("REDDIT_USER_AGENT")
+
+    if missing:
+        st.error(
+            "Missing Reddit API credentials: " + ", ".join(missing) +
+            "\n\nPlease add them in Settings → Secrets (or set environment variables)."
+        )
+        st.markdown(
+            "Add these entries in your Streamlit secrets:")
+        st.code(
+            """REDDIT_CLIENT_ID = "your_actual_client_id"
+REDDIT_CLIENT_SECRET = "your_actual_client_secret"
+REDDIT_USER_AGENT = "RedditScraper/1.0 by /u/yourusername""",
+            language="toml",
+        )
+        st.stop()
+
+    return praw.Reddit(
+        client_id=client_id,
+        client_secret=client_secret,
+        user_agent=user_agent,
+    )
 
 
 # ──────────────────────────── Intelligent Categorization ────────────────────────────
