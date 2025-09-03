@@ -54,7 +54,7 @@ Your Reddit scraper will be live and accessible to everyone!
 
 1. **Clone the repository**:
 ```bash
-   git clone https://github.com/yourusername/reddit-scraper.git
+   git clone https://github.com/pakagronglb/reddit-scraper.git
 cd reddit-scraper
 ```
 
@@ -203,7 +203,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you encounter any issues or have questions:
 
 1. Check the [troubleshooting section](#-troubleshooting)
-2. Search existing [issues](https://github.com/yourusername/reddit-scraper/issues)
+2. Search existing [issues](https://github.com/pakagronglb/reddit-scraper/issues)
 3. Create a new issue with detailed information about the problem
 
 ---
