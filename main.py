@@ -1,3 +1,6 @@
+import time
+from concurrent.futures import ThreadPoolExecutor
+import logging
 import os
 import re
 from datetime import datetime, date, timedelta, timezone
@@ -509,6 +512,8 @@ def create_stats_dashboard(df: pd.DataFrame):
         total_awards = df['Total Awards'].sum() if 'Total Awards' in df.columns else 0
         st.metric("🏆 Total Awards", int(total_awards))
 
+class EnhancedRedditScraper:
+
 def main() -> None:
     st.set_page_config(
         page_title="Reddit Data Scraper",
@@ -641,13 +646,14 @@ def main() -> None:
                 )
 
         # Action button with better styling
-        if st.button("🚀 Start Scraping", use_container_width=True):
-            with st.spinner("🔍 Collecting posts from r/{} ...".format(sub_name)):
-                df = get_subreddit_posts(
-                    reddit, sub_name,
-                    filter_type=filter_opt,
-                    start=start_d, end=end_d,
-                )
+use_multiple_periods, use_keyword_search, search_keywords = enhanced_scraping_options()
+
+if st.button("🚀 Start Scraping", use_container_width=True):
+    with st.spinner("🔍 Collecting posts from r/{} ...".format(sub_name)):
+        df = perform_enhanced_scraping(
+            reddit, sub_name, filter_opt, start_d, end_d,
+            use_multiple_periods, use_keyword_search, search_keywords
+        )
 
             if not df.empty:
                 # Apply content filters
