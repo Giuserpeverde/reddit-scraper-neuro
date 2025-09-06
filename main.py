@@ -998,29 +998,28 @@ if st.button("🚀 Start Scraping", use_container_width=True):
             reddit, sub_name, filter_opt, start_d, end_d,
             use_multiple_periods, use_keyword_search, search_keywords
         )
-
-            if not df.empty:
-                # Apply content filters
-                if min_score > 0:
-                    df = df[df['Score'] >= min_score]
-                if min_comments > 0:
-                    df = df[df['Total Comments'] >= min_comments]
-                if min_awards > 0:
-                    df = df[df['Total Awards'] >= min_awards]
-                if not include_nsfw:
-                    df = df[~df['Over 18']]
-                if not include_spoilers:
-                    df = df[~df['Spoiler']]
-                if oc_only:
-                    df = df[df['Is Original Content']]
+        if not df.empty:  # ← CORRETTO: 8 spazi (stesso livello della riga df = ...)
+            # Apply content filters
+            if min_score > 0:
+                df = df[df['Score'] >= min_score]
+            if min_comments > 0:
+                df = df[df['Total Comments'] >= min_comments]
+            if min_awards > 0:
+                df = df[df['Total Awards'] >= min_awards]
+            if not include_nsfw:
+                df = df[~df['Over 18']]
+            if not include_spoilers:
+                df = df[~df['Spoiler']]
+            if oc_only:
+                df = df[df['Is Original Content']]
                 
-                # Apply category filters (GummySearch style)
-                if selected_categories:
-                    df = df[df['Category'].isin(selected_categories)]
-                if min_confidence > 0:
-                    df = df[df['Category Confidence'] >= min_confidence]
+            # Apply category filters (GummySearch style)
+            if selected_categories:
+                df = df[df['Category'].isin(selected_categories)]
+            if min_confidence > 0:
+                df = df[df['Category Confidence'] >= min_confidence]
 
-                st.success(f"✅ Successfully fetched {len(df)} posts from r/{sub_name}")
+            st.success(f"✅ Successfully fetched {len(df)} posts from r/{sub_name}")
                 
                 # Stats dashboard
                 create_stats_dashboard(df)
