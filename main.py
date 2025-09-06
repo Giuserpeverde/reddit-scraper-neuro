@@ -1,10 +1,10 @@
-import time
 from concurrent.futures import ThreadPoolExecutor
-import logging
 import os
 import re
 from datetime import datetime, date, timedelta, timezone
 from typing import List, Dict, Tuple
+import time
+import logging
 
 import pandas as pd
 import praw
@@ -513,20 +513,6 @@ def create_stats_dashboard(df: pd.DataFrame):
         st.metric("🏆 Total Awards", int(total_awards))
 
 class EnhancedRedditScraper:
-    # ═══════════════════════════════════════════════════════════════════
-# AGGIUNGI QUESTO CODICE AL TUO main.py
-# Posizionalo DOPO le tue funzioni esistenti (come classify_post_content)
-# e PRIMA della funzione main()
-# ═══════════════════════════════════════════════════════════════════
-
-import time
-import logging
-
-class EnhancedRedditScraper:
-    """
-    Classe per migliorare la raccolta di dati storici da Reddit
-    utilizzando multiple strategie con l'API standard di Reddit.
-    """
     
     def __init__(self, reddit_instance):
         """Inizializza lo scraper con un'istanza di Reddit PRAW."""
