@@ -1012,56 +1012,55 @@ if st.button("🚀 Start Scraping", use_container_width=True):
                 df = df[~df['Spoiler']]
             if oc_only:
                 df = df[df['Is Original Content']]
-                
-            # Apply category filters (GummySearch style)
+                            # Apply category filters (GummySearch style)
             if selected_categories:
                 df = df[df['Category'].isin(selected_categories)]
             if min_confidence > 0:
                 df = df[df['Category Confidence'] >= min_confidence]
 
             st.success(f"✅ Successfully fetched {len(df)} posts from r/{sub_name}")
+            
+            # Stats dashboard
+            create_stats_dashboard(df)
+            
+            # Category analytics (GummySearch style)
+            create_category_analytics(df)
+            
+            # Charts section
+            if show_charts and len(df) > 0:
+                st.markdown('<h3 class="section-header">📊 Analytics</h3>', unsafe_allow_html=True)
                 
-                # Stats dashboard
-                create_stats_dashboard(df)
+                chart_col1, chart_col2 = st.columns(2)
                 
-                # Category analytics (GummySearch style)
-                create_category_analytics(df)
-                
-                # Charts section
-                if show_charts and len(df) > 0:
-                    st.markdown('<h3 class="section-header">📊 Analytics</h3>', unsafe_allow_html=True)
+                with chart_col1:
+                    # Score distribution
+                    fig_score = px.histogram(
+                        df, x='Score', nbins=20,
+                        title="Score Distribution",
+                        color_discrete_sequence=['#FF4B4B']
+                        )
+                    fig_score.update_layout(
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font_color='white'
+                    )
+                    st.plotly_chart(fig_score, use_container_width=True)
                     
-                    chart_col1, chart_col2 = st.columns(2)
-                    
-                    with chart_col1:
-                        # Score distribution
-                        fig_score = px.histogram(
-                            df, x='Score', nbins=20,
-                            title="Score Distribution",
-                            color_discrete_sequence=['#FF4B4B']
-                        )
-                        fig_score.update_layout(
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            font_color='white'
-                        )
-                        st.plotly_chart(fig_score, use_container_width=True)
-                    
-                    with chart_col2:
-                        # Posts over time
-                        df['Date'] = pd.to_datetime(df['Created UTC']).dt.date
-                        posts_per_day = df.groupby('Date').size().reset_index(name='Posts')
-                        fig_time = px.line(
-                            posts_per_day, x='Date', y='Posts',
-                            title="Posts Over Time",
-                            color_discrete_sequence=['#00D4FF']
-                        )
-                        fig_time.update_layout(
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            font_color='white'
-                        )
-                        st.plotly_chart(fig_time, use_container_width=True)
+                with chart_col2:
+                    # Posts over time
+                    df['Date'] = pd.to_datetime(df['Created UTC']).dt.date
+                    posts_per_day = df.groupby('Date').size().reset_index(name='Posts')
+                    fig_time = px.line(
+                        posts_per_day, x='Date', y='Posts',
+                        title="Posts Over Time",
+                        color_discrete_sequence=['#00D4FF']
+                    )
+                    fig_time.update_layout(
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font_color='white'
+                    )
+                    st.plotly_chart(fig_time, use_container_width=True)
 
                 # Data table with enhanced display
                 st.markdown('<h3 class="section-header">📋 Post Data</h3>', unsafe_allow_html=True)
