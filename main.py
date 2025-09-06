@@ -1126,51 +1126,51 @@ if st.button("🚀 Start Scraping", use_container_width=True):
                 st.error("❌ No posts found. Please check the subreddit name and try again.")
 
     # ── Single-thread mode ─────────────────────────────────────────────────────
-    else:
-        st.markdown('<h2 class="section-header">🔗 Post URL Scraper</h2>', unsafe_allow_html=True)
+        else:
+            st.markdown('<h2 class="section-header">🔗 Post URL Scraper</h2>', unsafe_allow_html=True)
 
-        # URL input with validation
-        url = st.text_input(
-            "**Reddit Post URL**",
-            placeholder="https://www.reddit.com/r/subreddit/comments/post_id/title/",
-            help="Enter the full URL of the Reddit post you want to scrape"
-        )
+            # URL input with validation
+            url = st.text_input(
+                "**Reddit Post URL**",
+                placeholder="https://www.reddit.com/r/subreddit/comments/post_id/title/",
+                help="Enter the full URL of the Reddit post you want to scrape"
+            )
         
-        # Comment analysis options
-        with st.expander("🔧 Comment Analysis Options"):
-            col1, col2 = st.columns(2)
-            with col1:
-                include_deleted = st.checkbox("Include Deleted Comments", value=False)
-                sort_comments = st.selectbox("Sort Comments By", ["Score", "Date", "Author"])
-            with col2:
-                min_comment_score = st.number_input("Min Comment Score", value=-1000)
-                max_comments = st.number_input("Max Comments", value=1000, min_value=1)
+            # Comment analysis options
+            with st.expander("🔧 Comment Analysis Options"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    include_deleted = st.checkbox("Include Deleted Comments", value=False)
+                    sort_comments = st.selectbox("Sort Comments By", ["Score", "Date", "Author"])
+                with col2:
+                    min_comment_score = st.number_input("Min Comment Score", value=-1000)
+                    max_comments = st.number_input("Max Comments", value=1000, min_value=1)
 
-        if st.button("🚀 Scrape Post & Comments", use_container_width=True):
-            if url:
-                with st.spinner("📥 Fetching submission & comments..."):
-                    post_df, cmt_df = get_post_by_url(reddit, url)
+            if st.button("🚀 Scrape Post & Comments", use_container_width=True):
+                if url:
+                    with st.spinner("📥 Fetching submission & comments..."):
+                        post_df, cmt_df = get_post_by_url(reddit, url)
 
-                if not post_df.empty:
-                    # Post details section
-                    st.markdown('<h3 class="section-header">📄 Post Details</h3>', unsafe_allow_html=True)
+                    if not post_df.empty:
+                        # Post details section
+                        st.markdown('<h3 class="section-header">📄 Post Details</h3>', unsafe_allow_html=True)
                     
-                    # Display key metrics for the post
-                    if len(post_df) > 0:
-                        post = post_df.iloc[0]
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric("👍 Score", int(post['Score']))
-                        with col2:
-                            st.metric("💬 Comments", int(post['Total Comments']))
-                        with col3:
-                            st.metric("🏆 Awards", int(post['Total Awards']))
-                        with col4:
-                            ratio = post['Up-vote Ratio']
-                            st.metric("📈 Upvote Ratio", f"{ratio:.1%}")
+                        # Display key metrics for the post
+                        if len(post_df) > 0:
+                            post = post_df.iloc[0]
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric("👍 Score", int(post['Score']))
+                            with col2:
+                                st.metric("💬 Comments", int(post['Total Comments']))
+                            with col3:
+                                st.metric("🏆 Awards", int(post['Total Awards']))
+                            with col4:
+                                ratio = post['Up-vote Ratio']
+                                st.metric("📈 Upvote Ratio", f"{ratio:.1%}")
                     
-                    # Post data table
-                    st.dataframe(post_df, use_container_width=True)
+                        # Post data table
+                        st.dataframe(post_df, use_container_width=True)
 
                     # Comments section
                     if not cmt_df.empty:
