@@ -89,6 +89,20 @@ def get_category_keywords() -> Dict[str, List[str]]:
             "like", "competitor", "switch from", "migrate", "move away", "leave", "quit",
             "fed up", "done with", "tired of", "sick of", "switching", "changing",
             "compare", "vs", "versus", "difference", "which is better", "pros and cons"
+        ],
+        "Work/Study Related": [            
+            "agenda", "assignment", "balance", "boss", "burnout", "campus", "career",            
+            "class", "collaboration", "colleague", "college", "commute", "conference",
+            "coursework", "coworker", "coworking", "cubicle", "deadline", "desk",
+            "digital nomad", "dissertation", "distraction", "exam", "flexible work",
+            "focus", "gpa", "grade", "group project", "home office", "homework",
+            "hybrid", "internship", "lab", "lecture", "library", "manager", "meeting",
+            "mentor", "networking", "notebook", "notes", "office", "open space",
+            "overtime", "presentation", "productivity", "professor", "project",
+            "promotion", "remote work", "revision", "routine", "schedule", "school",
+            "seminar", "study", "studying", "syllabus", "task", "teacher", "teamwork",
+            "telecommute", "thesis", "time blocking", "time management", "tutorial",
+            "university", "workflow", "work-life", "work from home", "workspace",
         ]
     }
 
