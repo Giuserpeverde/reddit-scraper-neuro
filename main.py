@@ -103,7 +103,7 @@ def get_category_keywords() -> Dict[str, List[str]]:
             "seminar", "study", "studying", "syllabus", "task", "teacher", "teamwork",
             "telecommute", "thesis", "time blocking", "time management", "tutorial",
             "university", "workflow", "work-life", "work from home", "workspace",
-        ]
+        ],
     }
 
 def classify_post_content(title: str, text: str) -> Tuple[str, float]:
@@ -620,7 +620,7 @@ def main() -> None:
         # Category filters (like GummySearch)
         with st.expander("🏷️ Category Filters (GummySearch Style)"):
             st.markdown("**Filter by Content Categories:**")
-            categories = ["All Categories", "Pain Points", "Solution Requests", "Money Talk", "Hot Discussions", "Seeking Alternatives", "General Discussion"]
+            categories = ["All Categories", "Pain Points", "Solution Requests", "Money Talk", "Hot Discussions", "Seeking Alternatives", "Work/Study Related", "General Discussion"]
             
             col1, col2 = st.columns(2)
             with col1:
