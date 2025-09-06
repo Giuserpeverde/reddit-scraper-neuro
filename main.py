@@ -513,6 +513,364 @@ def create_stats_dashboard(df: pd.DataFrame):
         st.metric("🏆 Total Awards", int(total_awards))
 
 class EnhancedRedditScraper:
+    # ═══════════════════════════════════════════════════════════════════
+# AGGIUNGI QUESTO CODICE AL TUO main.py
+# Posizionalo DOPO le tue funzioni esistenti (come classify_post_content)
+# e PRIMA della funzione main()
+# ═══════════════════════════════════════════════════════════════════
+
+import time
+import logging
+
+class EnhancedRedditScraper:
+    """
+    Classe per migliorare la raccolta di dati storici da Reddit
+    utilizzando multiple strategie con l'API standard di Reddit.
+    """
+    
+    def __init__(self, reddit_instance):
+        """Inizializza lo scraper con un'istanza di Reddit PRAW."""
+        self.reddit = reddit_instance
+        self.logger = logging.getLogger(__name__)
+        
+    def get_multiple_time_periods(self, subreddit_name: str, days_back: int = 365) -> pd.DataFrame:
+        """
+        Raccoglie post da diversi periodi temporali per ottenere più dati storici.
+        
+        Args:
+            subreddit_name: Nome del subreddit (senza r/)
+            days_back: Quanti giorni indietro cercare
+            
+        Returns:
+            DataFrame con i post trovati
+        """
+        all_posts = []
+        subreddit = self.reddit.subreddit(subreddit_name)
+        
+        # Diversi filtri temporali da provare
+        time_filters = ['week', 'month', 'year', 'all']
+        
+        progress_bar = st.progress(0)
+        total_filters = len(time_filters)
+        
+        for i, time_filter in enumerate(time_filters):
+            try:
+                st.info(f"🔍 Raccogliendo i post più votati da: {time_filter}")
+                
+                # Raccogli i post più votati per questo periodo
+                for post in subreddit.top(time_filter=time_filter, limit=250):
+                    # Verifica se il post rientra nel range di date desiderato
+                    post_date = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+                    days_ago = (datetime.now(timezone.utc) - post_date).days
+                    
+                    if days_ago <= days_back:
+                        # Classifica il contenuto del post
+                        category, confidence = classify_post_content(post.title, post.selftext or "")
+                        
+                        post_data = {
+                            "ID": post.id,
+                            "Title": post.title,
+                            "Post Text": post.selftext,
+                            "Subreddit": post.subreddit.display_name,
+                            "Author": str(post.author),
+                            "Created UTC": post_date,
+                            "Score": post.score,
+                            "Up-vote Ratio": post.upvote_ratio,
+                            "Total Comments": post.num_comments,
+                            "Total Awards": post.total_awards_received,
+                            "Flair": post.link_flair_text,
+                            "Is Original Content": post.is_original_content,
+                            "Over 18": post.over_18,
+                            "Spoiler": post.spoiler,
+                            "Num Cross-posts": post.num_crossposts,
+                            "Permalink": f"https://www.reddit.com{post.permalink}",
+                            "Post URL": post.url,
+                            "Category": category,
+                            "Category Confidence": confidence,
+                            "Source": f"top_{time_filter}",  # Indica da dove proviene il post
+                            "Days Ago": days_ago
+                        }
+                        all_posts.append(post_data)
+                
+                # Aggiorna la barra di progresso
+                progress_bar.progress((i + 1) / total_filters)
+                
+                # Pausa per rispettare i limiti di rate dell'API
+                time.sleep(1)
+                
+            except Exception as e:
+                st.warning(f"Impossibile raccogliere da {time_filter}: {e}")
+                continue
+        
+        # Rimuovi duplicati basandoti sull'ID del post
+        df = pd.DataFrame(all_posts)
+        if not df.empty:
+            # Rimuovi post duplicati
+            before_dedup = len(df)
+            df = df.drop_duplicates(subset=['ID'], keep='first')
+            after_dedup = len(df)
+            
+            if before_dedup != after_dedup:
+                st.info(f"🔄 Rimossi {before_dedup - after_dedup} post duplicati")
+            
+            # Ordina per data (più recenti prima)
+            df = df.sort_values('Created UTC', ascending=False)
+            
+        return df
+    
+    def search_by_keywords(self, subreddit_name: str, keywords: list, 
+                          days_back: int = 365, limit: int = 100) -> pd.DataFrame:
+        """
+        Cerca post contenenti parole chiave specifiche.
+        Questo può aiutare a trovare post più vecchi che menzionano argomenti specifici.
+        
+        Args:
+            subreddit_name: Nome del subreddit
+            keywords: Lista di parole chiave da cercare
+            days_back: Quanti giorni indietro cercare
+            limit: Numero massimo di post per parola chiave
+            
+        Returns:
+            DataFrame con i post trovati
+        """
+        all_posts = []
+        subreddit = self.reddit.subreddit(subreddit_name)
+        
+        progress_bar = st.progress(0)
+        total_keywords = len(keywords)
+        
+        for i, keyword in enumerate(keywords):
+            try:
+                st.info(f"🔍 Cercando la parola chiave: '{keyword}'")
+                
+                # Cerca post contenenti la parola chiave
+                for post in subreddit.search(keyword, sort='new', time_filter='all', limit=limit):
+                    post_date = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+                    days_ago = (datetime.now(timezone.utc) - post_date).days
+                    
+                    if days_ago <= days_back:
+                        category, confidence = classify_post_content(post.title, post.selftext or "")
+                        
+                        post_data = {
+                            "ID": post.id,
+                            "Title": post.title,
+                            "Post Text": post.selftext,
+                            "Subreddit": post.subreddit.display_name,
+                            "Author": str(post.author),
+                            "Created UTC": post_date,
+                            "Score": post.score,
+                            "Up-vote Ratio": post.upvote_ratio,
+                            "Total Comments": post.num_comments,
+                            "Total Awards": post.total_awards_received,
+                            "Flair": post.link_flair_text,
+                            "Is Original Content": post.is_original_content,
+                            "Over 18": post.over_18,
+                            "Spoiler": post.spoiler,
+                            "Num Cross-posts": post.num_crossposts,
+                            "Permalink": f"https://www.reddit.com{post.permalink}",
+                            "Post URL": post.url,
+                            "Category": category,
+                            "Category Confidence": confidence,
+                            "Source": f"search_{keyword}",
+                            "Search Keyword": keyword,
+                            "Days Ago": days_ago
+                        }
+                        all_posts.append(post_data)
+                
+                # Aggiorna barra di progresso
+                progress_bar.progress((i + 1) / total_keywords)
+                
+                # Pausa per rate limiting
+                time.sleep(1)
+                
+            except Exception as e:
+                st.warning(f"Ricerca fallita per '{keyword}': {e}")
+                continue
+        
+        # Rimuovi duplicati e ordina
+        df = pd.DataFrame(all_posts)
+        if not df.empty:
+            df = df.drop_duplicates(subset=['ID'], keep='first')
+            df = df.sort_values('Created UTC', ascending=False)
+            
+        return df
+    
+    def get_comprehensive_data(self, subreddit_name: str, days_back: int = 90) -> pd.DataFrame:
+        """
+        Metodo principale che combina tutte le strategie per ottenere il massimo dei dati.
+        
+        Args:
+            subreddit_name: Nome del subreddit
+            days_back: Giorni indietro da cercare
+            
+        Returns:
+            DataFrame combinato con tutti i post trovati
+        """
+        st.markdown("### 🔍 Raccolta Dati Completa")
+        
+        all_dataframes = []
+        
+        # Strategia 1: API standard
+        try:
+            st.info("📥 Strategia 1: API Reddit standard...")
+            df_standard = get_subreddit_posts(
+                self.reddit, subreddit_name, 
+                filter_type="All", start=None, end=None
+            )
+            if not df_standard.empty:
+                df_standard['Source'] = 'standard_api'
+                all_dataframes.append(df_standard)
+                st.success(f"✅ API Standard: {len(df_standard)} post")
+        except Exception as e:
+            st.warning(f"API standard fallita: {e}")
+        
+        # Strategia 2: Multi-periodo
+        try:
+            st.info("📥 Strategia 2: Raccolta multi-periodo...")
+            df_multi = self.get_multiple_time_periods(subreddit_name, days_back)
+            if not df_multi.empty:
+                all_dataframes.append(df_multi)
+                st.success(f"✅ Multi-periodo: {len(df_multi)} post")
+        except Exception as e:
+            st.warning(f"Raccolta multi-periodo fallita: {e}")
+        
+        # Combina tutti i risultati
+        if all_dataframes:
+            combined_df = pd.concat(all_dataframes, ignore_index=True)
+            
+            # Rimuovi duplicati finali
+            before_final = len(combined_df)
+            combined_df = combined_df.drop_duplicates(subset=['ID'], keep='first')
+            after_final = len(combined_df)
+            
+            st.success(f"🎉 Totale: {after_final} post unici raccolti ({before_final - after_final} duplicati rimossi)")
+            
+            # Ordina per data
+            combined_df = combined_df.sort_values('Created UTC', ascending=False)
+            
+            return combined_df
+        else:
+            st.error("❌ Nessuna strategia ha prodotto risultati")
+            return pd.DataFrame()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# FUNZIONI DI SUPPORTO - Aggiungi anche queste
+# ═══════════════════════════════════════════════════════════════════
+
+def enhanced_scraping_options():
+    """Opzioni avanzate per lo scraping nell'interfaccia Streamlit."""
+    
+    with st.expander("🚀 Opzioni Avanzate per Dati Storici"):
+        st.markdown("""
+        **Poiché Pushshift non è più disponibile gratuitamente, ecco le opzioni avanzate usando l'API di Reddit:**
+        """)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            use_enhanced_scraping = st.checkbox(
+                "Scraping Potenziato", 
+                value=True,
+                help="Usa multiple strategie per raccogliere più dati storici"
+            )
+            
+            use_keyword_search = st.checkbox(
+                "Ricerca per Parole Chiave",
+                value=False, 
+                help="Cerca parole chiave specifiche per trovare post più vecchi"
+            )
+        
+        with col2:
+            if use_keyword_search:
+                search_keywords = st.text_area(
+                    "Parole Chiave (una per riga)",
+                    placeholder="problema\naiuto\nraccomandazione\nconsigli",
+                    help="Inserisci le parole chiave da cercare, una per riga"
+                ).split('\n')
+                search_keywords = [kw.strip() for kw in search_keywords if kw.strip()]
+            else:
+                search_keywords = []
+                
+            days_back_limit = st.slider(
+                "Giorni indietro",
+                min_value=30,
+                max_value=365,
+                value=90,
+                help="Quanti giorni indietro cercare"
+            )
+        
+        return use_enhanced_scraping, use_keyword_search, search_keywords, days_back_limit
+
+def analyze_date_coverage(df: pd.DataFrame):
+    """Analizza e visualizza la copertura temporale dei dati raccolti."""
+    if df.empty or 'Created UTC' not in df.columns:
+        return
+    
+    st.markdown("### 📅 Analisi Copertura Temporale")
+    
+    # Converti in datetime se non già fatto
+    df['Created UTC'] = pd.to_datetime(df['Created UTC'])
+    
+    # Calcola range di date
+    oldest_post = df['Created UTC'].min()
+    newest_post = df['Created UTC'].max()
+    date_range = (newest_post - oldest_post).days
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📅 Post Più Vecchio", oldest_post.strftime("%d/%m/%Y"))
+    with col2:
+        st.metric("📅 Post Più Recente", newest_post.strftime("%d/%m/%Y"))
+    with col3:
+        st.metric("📊 Range Temporale", f"{date_range} giorni")
+    
+    # Mostra post per mese
+    df['Mese'] = df['Created UTC'].dt.to_period('M')
+    posts_per_month = df.groupby('Mese').size().reset_index(name='Post')
+    posts_per_month['Mese'] = posts_per_month['Mese'].astype(str)
+    
+    if len(posts_per_month) > 1:
+        import plotly.express as px
+        fig_timeline = px.bar(
+            posts_per_month, 
+            x='Mese', 
+            y='Post',
+            title="Post nel Tempo (Mensile)",
+            color_discrete_sequence=['#FF4B4B']
+        )
+        fig_timeline.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font_color='white',
+            xaxis_tickangle=-45
+        )
+        st.plotly_chart(fig_timeline, use_container_width=True)
+    
+    # Mostra distribuzione delle fonti
+    if 'Source' in df.columns:
+        st.markdown("### 📊 Fonti dei Dati")
+        source_counts = df['Source'].value_counts()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            for source, count in source_counts.items():
+                percentage = (count / len(df)) * 100
+                st.metric(f"🔹 {source.replace('_', ' ').title()}", f"{count} ({percentage:.1f}%)")
+        
+        with col2:
+            fig_sources = px.pie(
+                values=source_counts.values,
+                names=source_counts.index,
+                title="Distribuzione delle Fonti",
+                color_discrete_sequence=['#FF4B4B', '#00D4FF', '#00FF88', '#FF8C00']
+            )
+            fig_sources.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='white'
+            )
+            st.plotly_chart(fig_sources, use_container_width=True)
 
 def main() -> None:
     st.set_page_config(
