@@ -11,7 +11,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 
-# ────────────────────────────── env & reddit init ─────────────────────────────
+# ────────────────────────────── env & reddit init ──────────────────────────────
 if os.path.exists(".env"):  # load only in local/dev
     load_dotenv()
 
@@ -36,7 +36,8 @@ def init_reddit() -> praw.Reddit:
             "Missing Reddit API credentials: " + ", ".join(missing) +
             "\n\nPlease add them in Settings → Secrets (or set environment variables)."
         )
-        st.markdown("Add these entries in your Streamlit secrets:")
+        st.markdown(
+            "Add these entries in your Streamlit secrets:")
         st.code(
             """REDDIT_CLIENT_ID = "your_actual_client_id"
 REDDIT_CLIENT_SECRET = "your_actual_client_secret"
@@ -291,7 +292,7 @@ def get_post_by_url(_reddit: praw.Reddit, url: str) -> tuple[pd.DataFrame, pd.Da
         return pd.DataFrame(), pd.DataFrame()
 
 
-# ──────────────────────────────── Streamlit UI ─────────────────────────────
+# ──────────────────────────────── Streamlit UI ────────────────────────────────
 def apply_custom_css():
     """Apply custom CSS for modern dark theme and better styling."""
     st.markdown("""
@@ -438,5 +439,499 @@ def apply_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
-# ... rest of the code unchanged ...
-# (The rest of your file was already correctly indented.)
+def create_category_analytics(df: pd.DataFrame):
+    """Create category distribution analytics like GummySearch."""
+    if df.empty or 'Category' not in df.columns:
+        return
+    
+    st.markdown('<h3 class="section-header">🏷️ Content Categories</h3>', unsafe_allow_html=True)
+    
+    # Category distribution
+    category_counts = df['Category'].value_counts()
+    
+    # Create category cards
+    cols = st.columns(len(category_counts))
+    for i, (category, count) in enumerate(category_counts.items()):
+        with cols[i % len(cols)]:
+            icon = get_category_icon(category)
+            color = get_category_color(category)
+            percentage = (count / len(df)) * 100
+            
+            st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, {color}20, {color}10);
+                    border-left: 4px solid {color};
+                    border-radius: 8px;
+                    padding: 1rem;
+                    margin: 0.5rem 0;
+                    text-align: center;
+                ">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">{icon}</div>
+                    <div style="font-weight: 600; color: {color};">{category}</div>
+                    <div style="font-size: 1.5rem; font-weight: bold; margin: 0.5rem 0;">{count}</div>
+                    <div style="font-size: 0.9rem; opacity: 0.8;">{percentage:.1f}%</div>
+                </div>
+            """, unsafe_allow_html=True)
+    
+    # Category distribution chart
+    fig_categories = px.pie(
+        values=category_counts.values,
+        names=category_counts.index,
+        title="Category Distribution",
+        color=category_counts.index,
+        color_discrete_map={
+            cat: get_category_color(cat) for cat in category_counts.index
+        }
+    )
+    fig_categories.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font_color='white'
+    )
+    st.plotly_chart(fig_categories, use_container_width=True)
+
+def create_stats_dashboard(df: pd.DataFrame):
+    """Create a stats dashboard with key metrics."""
+    if df.empty:
+        return
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("📊 Total Posts", len(df))
+    with col2:
+        avg_score = df['Score'].mean() if 'Score' in df.columns else 0
+        st.metric("⭐ Avg Score", f"{avg_score:.1f}")
+    with col3:
+        avg_comments = df['Total Comments'].mean() if 'Total Comments' in df.columns else 0
+        st.metric("💬 Avg Comments", f"{avg_comments:.1f}")
+    with col4:
+        total_awards = df['Total Awards'].sum() if 'Total Awards' in df.columns else 0
+        st.metric("🏆 Total Awards", int(total_awards))
+
+def main() -> None:
+    st.set_page_config(
+        page_title="Reddit Data Scraper",
+        page_icon="reddit-logo.png",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    apply_custom_css()
+    
+    # Main header with custom logo inline
+    st.markdown(
+        '''
+        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 2rem;">
+            <img src="data:image/png;base64,{}" width="50" style="margin-right: 15px;">
+            <h1 class="main-header" style="margin: 0;">Reddit Data Scraper</h1>
+        </div>
+        '''.format(
+            __import__('base64').b64encode(open('reddit-logo.png', 'rb').read()).decode()
+        ),
+        unsafe_allow_html=True
+    )
+    
+    reddit = init_reddit()
+
+    # Enhanced sidebar with better organization
+    with st.sidebar:
+        st.markdown("### ⚙️ Configuration")
+        
+        # Mode selection with better styling
+        mode = st.radio(
+            "**Scraping Mode**",
+            ("Subreddit Posts", "Specific Post by URL"),
+            help="Choose what type of data you want to scrape"
+        )
+        
+        st.markdown("---")
+        
+        # Advanced options
+        with st.expander("🔧 Advanced Options"):
+            show_charts = st.checkbox("Show Analytics Charts", value=True)
+            auto_refresh = st.checkbox("Auto-refresh Data", value=False)
+            if auto_refresh:
+                refresh_interval = st.slider("Refresh Interval (minutes)", 1, 60, 5)
+
+    # ── Subreddit mode ─────────────────────────────────────────────────────────
+    if mode == "Subreddit Posts":
+        st.markdown('<h2 class="section-header">🔍 Subreddit Posts Scraper</h2>', unsafe_allow_html=True)
+
+        # Main input section with better layout
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            sub_name = st.text_input(
+                "**Subreddit Name**",
+                value="",
+                placeholder="e.g., selfhosted, programming, technology",
+                help="Enter the name of the subreddit without 'r/'"
+            )
+        with col2:
+            max_posts = st.number_input(
+                "**Max Posts**",
+                min_value=10,
+                max_value=1000,
+                value=100,
+                step=10,
+                help="Maximum number of posts to fetch"
+            )
+
+        # Enhanced filter section
+        st.markdown("**📅 Date & Time Filters**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            filter_opt = st.selectbox(
+                "Time Period",
+                ("All", "Last Week", "Last Month", "Last Year", "Date Range"),
+                help="Select the time period for post filtering"
+            )
+        with col2:
+            sort_option = st.selectbox(
+                "Sort By",
+                ("New", "Hot", "Top", "Rising"),
+                help="Choose how posts should be sorted"
+            )
+
+        start_d = end_d = None
+        if filter_opt == "Date Range":
+            col1, col2 = st.columns(2)
+            with col1:
+                start_d = st.date_input("Start date", value=date.today() - timedelta(days=7))
+            with col2:
+                end_d = st.date_input("End date", value=date.today())
+            if start_d > end_d:
+                st.warning("⚠️ Start date must be before end date.")
+
+        # Content filters
+        with st.expander("🎯 Content Filters"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                min_score = st.number_input("Min Score", value=0, help="Minimum post score")
+                include_nsfw = st.checkbox("Include NSFW", value=False)
+            with col2:
+                min_comments = st.number_input("Min Comments", value=0, help="Minimum comment count")
+                include_spoilers = st.checkbox("Include Spoilers", value=True)
+            with col3:
+                min_awards = st.number_input("Min Awards", value=0, help="Minimum award count")
+                oc_only = st.checkbox("Original Content Only", value=False)
+        
+        # Category filters (like GummySearch)
+        with st.expander("🏷️ Category Filters (GummySearch Style)"):
+            st.markdown("**Filter by Content Categories:**")
+            categories = ["All Categories", "Pain Points", "Solution Requests", "Money Talk", "Hot Discussions", "Seeking Alternatives", "Work/Study Related", "General Discussion"]
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                selected_categories = st.multiselect(
+                    "Select Categories",
+                    categories[1:],  # Exclude "All Categories" from multiselect
+                    default=[],
+                    help="Choose which types of content to include"
+                )
+            with col2:
+                min_confidence = st.slider(
+                    "Category Confidence",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.1,
+                    step=0.1,
+                    help="Minimum confidence for category classification"
+                )
+
+        # Action button with better styling
+        if st.button("🚀 Start Scraping", use_container_width=True):
+            with st.spinner("🔍 Collecting posts from r/{} ...".format(sub_name)):
+                df = get_subreddit_posts(
+                    reddit, sub_name,
+                    filter_type=filter_opt,
+                    start=start_d, end=end_d,
+                )
+
+            if not df.empty:
+                # Apply content filters
+                if min_score > 0:
+                    df = df[df['Score'] >= min_score]
+                if min_comments > 0:
+                    df = df[df['Total Comments'] >= min_comments]
+                if min_awards > 0:
+                    df = df[df['Total Awards'] >= min_awards]
+                if not include_nsfw:
+                    df = df[~df['Over 18']]
+                if not include_spoilers:
+                    df = df[~df['Spoiler']]
+                if oc_only:
+                    df = df[df['Is Original Content']]
+                
+                # Apply category filters (GummySearch style)
+                if selected_categories:
+                    df = df[df['Category'].isin(selected_categories)]
+                if min_confidence > 0:
+                    df = df[df['Category Confidence'] >= min_confidence]
+
+                st.success(f"✅ Successfully fetched {len(df)} posts from r/{sub_name}")
+                
+                # Stats dashboard
+                create_stats_dashboard(df)
+                
+                # Category analytics (GummySearch style)
+                create_category_analytics(df)
+                
+                # Charts section
+                if show_charts and len(df) > 0:
+                    st.markdown('<h3 class="section-header">📊 Analytics</h3>', unsafe_allow_html=True)
+                    
+                    chart_col1, chart_col2 = st.columns(2)
+                    
+                    with chart_col1:
+                        # Score distribution
+                        fig_score = px.histogram(
+                            df, x='Score', nbins=20,
+                            title="Score Distribution",
+                            color_discrete_sequence=['#FF4B4B']
+                        )
+                        fig_score.update_layout(
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            font_color='white'
+                        )
+                        st.plotly_chart(fig_score, use_container_width=True)
+                    
+                    with chart_col2:
+                        # Posts over time
+                        df['Date'] = pd.to_datetime(df['Created UTC']).dt.date
+                        posts_per_day = df.groupby('Date').size().reset_index(name='Posts')
+                        fig_time = px.line(
+                            posts_per_day, x='Date', y='Posts',
+                            title="Posts Over Time",
+                            color_discrete_sequence=['#00D4FF']
+                        )
+                        fig_time.update_layout(
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            font_color='white'
+                        )
+                        st.plotly_chart(fig_time, use_container_width=True)
+
+                # Data table with enhanced display
+                st.markdown('<h3 class="section-header">📋 Post Data</h3>', unsafe_allow_html=True)
+                
+                # Column selection
+                with st.expander("🔧 Customize Columns"):
+                    all_columns = df.columns.tolist()
+                    default_columns = ['Title', 'Category', 'Author', 'Score', 'Total Comments', 'Created UTC', 'Permalink']
+                    selected_columns = st.multiselect(
+                        "Select columns to display:",
+                        all_columns,
+                        default=[col for col in default_columns if col in all_columns]
+                    )
+                
+                display_df = df[selected_columns] if selected_columns else df
+                
+                # Enhanced dataframe display with category styling
+                if 'Category' in display_df.columns:
+                    # Create a copy for styling
+                    styled_df = display_df.copy()
+                    
+                    # Add category styling
+                    def style_category(val):
+                        color = get_category_color(val)
+                        icon = get_category_icon(val)
+                        return f"background-color: {color}20; color: {color}; font-weight: bold;"
+                    
+                    # Apply styling to Category column
+                    styled_df = styled_df.style.applymap(style_category, subset=['Category'])
+                    st.dataframe(styled_df, use_container_width=True, height=400)
+                else:
+                    st.dataframe(display_df, use_container_width=True, height=400)
+
+                # Download section
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.download_button(
+                        "📥 Download Full CSV",
+                        df.to_csv(index=False).encode(),
+                        f"{sub_name}_posts_full.csv",
+                        "text/csv",
+                        use_container_width=True
+                    )
+                with col2:
+                    if selected_columns:
+                        st.download_button(
+                            "📥 Download Selected CSV",
+                            display_df.to_csv(index=False).encode(),
+                            f"{sub_name}_posts_selected.csv",
+                            "text/csv",
+                            use_container_width=True
+                        )
+                with col3:
+                    # JSON download option
+                    st.download_button(
+                        "📥 Download JSON",
+                        df.to_json(orient='records', date_format='iso').encode(),
+                        f"{sub_name}_posts.json",
+                        "application/json",
+                        use_container_width=True
+                    )
+            else:
+                st.error("❌ No posts found. Please check the subreddit name and try again.")
+
+    # ── Single-thread mode ─────────────────────────────────────────────────────
+    else:
+        st.markdown('<h2 class="section-header">🔗 Post URL Scraper</h2>', unsafe_allow_html=True)
+
+        # URL input with validation
+        url = st.text_input(
+            "**Reddit Post URL**",
+            placeholder="https://www.reddit.com/r/subreddit/comments/post_id/title/",
+            help="Enter the full URL of the Reddit post you want to scrape"
+        )
+        
+        # Comment analysis options
+        with st.expander("🔧 Comment Analysis Options"):
+            col1, col2 = st.columns(2)
+            with col1:
+                include_deleted = st.checkbox("Include Deleted Comments", value=False)
+                sort_comments = st.selectbox("Sort Comments By", ["Score", "Date", "Author"])
+            with col2:
+                min_comment_score = st.number_input("Min Comment Score", value=-1000)
+                max_comments = st.number_input("Max Comments", value=1000, min_value=1)
+
+        if st.button("🚀 Scrape Post & Comments", use_container_width=True):
+            if url:
+                with st.spinner("📥 Fetching submission & comments..."):
+                    post_df, cmt_df = get_post_by_url(reddit, url)
+
+                if not post_df.empty:
+                    # Post details section
+                    st.markdown('<h3 class="section-header">📄 Post Details</h3>', unsafe_allow_html=True)
+                    
+                    # Display key metrics for the post
+                    if len(post_df) > 0:
+                        post = post_df.iloc[0]
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("👍 Score", int(post['Score']))
+                        with col2:
+                            st.metric("💬 Comments", int(post['Total Comments']))
+                        with col3:
+                            st.metric("🏆 Awards", int(post['Total Awards']))
+                        with col4:
+                            ratio = post['Up-vote Ratio']
+                            st.metric("📈 Upvote Ratio", f"{ratio:.1%}")
+                    
+                    # Post data table
+                    st.dataframe(post_df, use_container_width=True)
+
+                    # Comments section
+                    if not cmt_df.empty:
+                        # Filter comments
+                        filtered_cmt_df = cmt_df.copy()
+                        
+                        if min_comment_score > -1000:
+                            filtered_cmt_df = filtered_cmt_df[filtered_cmt_df['Score'] >= min_comment_score]
+                        
+                        if not include_deleted:
+                            filtered_cmt_df = filtered_cmt_df[
+                                ~filtered_cmt_df['Comment Text'].isin(['[deleted]', '[removed]'])
+                            ]
+                        
+                        # Sort comments
+                        if sort_comments == "Score":
+                            filtered_cmt_df = filtered_cmt_df.sort_values('Score', ascending=False)
+                        elif sort_comments == "Date":
+                            filtered_cmt_df = filtered_cmt_df.sort_values('Created UTC', ascending=False)
+                        elif sort_comments == "Author":
+                            filtered_cmt_df = filtered_cmt_df.sort_values('Author')
+                        
+                        # Limit comments
+                        if len(filtered_cmt_df) > max_comments:
+                            filtered_cmt_df = filtered_cmt_df.head(max_comments)
+                        
+                        st.markdown(f'<h3 class="section-header">💬 Comments ({len(filtered_cmt_df)} of {len(cmt_df)})</h3>', unsafe_allow_html=True)
+                        
+                        # Comment analytics
+                        if show_charts and len(filtered_cmt_df) > 0:
+                            chart_col1, chart_col2 = st.columns(2)
+                            
+                            with chart_col1:
+                                # Comment score distribution
+                                fig_comments = px.histogram(
+                                    filtered_cmt_df, x='Score', nbins=20,
+                                    title="Comment Score Distribution",
+                                    color_discrete_sequence=['#00D4FF']
+                                )
+                                fig_comments.update_layout(
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    font_color='white'
+                                )
+                                st.plotly_chart(fig_comments, use_container_width=True)
+                            
+                            with chart_col2:
+                                # Comments over time
+                                filtered_cmt_df['Date'] = pd.to_datetime(filtered_cmt_df['Created UTC']).dt.date
+                                comments_per_day = filtered_cmt_df.groupby('Date').size().reset_index(name='Comments')
+                                fig_cmt_time = px.line(
+                                    comments_per_day, x='Date', y='Comments',
+                                    title="Comments Over Time",
+                                    color_discrete_sequence=['#00FF88']
+                                )
+                                fig_cmt_time.update_layout(
+                                    plot_bgcolor='rgba(0,0,0,0)',
+                                    paper_bgcolor='rgba(0,0,0,0)',
+                                    font_color='white'
+                                )
+                                st.plotly_chart(fig_cmt_time, use_container_width=True)
+                        
+                        # Comments data table
+                        st.dataframe(filtered_cmt_df, use_container_width=True, height=400)
+                    else:
+                        st.info("No comments found for this post.")
+
+                    # Enhanced download section
+                    st.markdown('<h3 class="section-header">📥 Download Options</h3>', unsafe_allow_html=True)
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.download_button(
+                            "📄 Post CSV",
+                            post_df.to_csv(index=False).encode(),
+                            "post_details.csv",
+                            "text/csv",
+                            use_container_width=True
+                        )
+                    with col2:
+                        if not cmt_df.empty:
+                            st.download_button(
+                                "💬 Comments CSV",
+                                filtered_cmt_df.to_csv(index=False).encode(),
+                                "comments.csv",
+                                "text/csv",
+                                use_container_width=True
+                            )
+                    with col3:
+                        st.download_button(
+                            "📄 Post JSON",
+                            post_df.to_json(orient='records', date_format='iso').encode(),
+                            "post_details.json",
+                            "application/json",
+                            use_container_width=True
+                        )
+                    with col4:
+                        if not cmt_df.empty:
+                            st.download_button(
+                                "💬 Comments JSON",
+                                filtered_cmt_df.to_json(orient='records', date_format='iso').encode(),
+                                "comments.json",
+                                "application/json",
+                                use_container_width=True
+                            )
+                else:
+                    st.error("❌ Failed to fetch post data. Please check the URL and try again.")
+            else:
+                st.warning("⚠️ Please enter a valid Reddit post URL.")
+
+if __name__ == "__main__":
+    main()
